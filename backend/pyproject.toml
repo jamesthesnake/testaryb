@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "submission"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+openai = "1.44.0"
+fastapi = "^0.115.0"
+uvicorn = {extras = ["standard"], version = "^0.30.6"}
+python-dotenv = "^1.0.1"
+streamlit = "^1.38.0"
+markdown2 = "^2.5.0"
+weasyprint = "^62.3"
+pandas = "^2.2.3"
+matplotlib = "^3.9.2"
+pyfakefs = "^5.6.0"
+pinecone = "^3.0.0"
+langchain = "^0.2.16"
+instructor = "^1.4.1"
+tenacity = "^8.5.0"
+tiktoken = "^0.7.0"
+loguru = "^0.7.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".."]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
