@@ -1,0 +1,164 @@
+{
+  "specialist_model": "gpt-4o-2024-08-06",
+  "judge_model": "gpt-4o-2024-08-06",
+  "timestamp": "2026-04-23T16:33:00Z",
+  "mean_score": 1.0,
+  "pass_rate": 0.0,
+  "results": [
+    {
+      "question": "What is the current GDP of the US?",
+      "expected_series": [
+        "GDP",
+        "REAL_GDP"
+      ],
+      "cited_series": [],
+      "answer": "ERROR: Client.__init__() got an unexpected keyword argument 'proxies'",
+      "metrics_count": 0,
+      "warnings": [
+        "Client.__init__() got an unexpected keyword argument 'proxies'"
+      ],
+      "judge": {
+        "score": 1,
+        "grounded_in_data": false,
+        "cites_correct_series": false,
+        "contains_specific_values": false,
+        "reasoning": "Evaluation could not complete due to error: Client.__init__() got an unexpected keyword argument 'proxies'"
+      },
+      "specialist_model": "gpt-4o-2024-08-06",
+      "judge_model": "gpt-4o-2024-08-06",
+      "timestamp": "2026-04-23T16:33:00Z"
+    },
+    {
+      "question": "What is the inflation rate in the Eurozone?",
+      "expected_series": [
+        "EUROZONE_INFLATION"
+      ],
+      "cited_series": [],
+      "answer": "ERROR: Client.__init__() got an unexpected keyword argument 'proxies'",
+      "metrics_count": 0,
+      "warnings": [
+        "Client.__init__() got an unexpected keyword argument 'proxies'"
+      ],
+      "judge": {
+        "score": 1,
+        "grounded_in_data": false,
+        "cites_correct_series": false,
+        "contains_specific_values": false,
+        "reasoning": "Evaluation could not complete due to error: Client.__init__() got an unexpected keyword argument 'proxies'"
+      },
+      "specialist_model": "gpt-4o-2024-08-06",
+      "judge_model": "gpt-4o-2024-08-06",
+      "timestamp": "2026-04-23T16:33:00Z"
+    },
+    {
+      "question": "What is the unemployment rate in Japan?",
+      "expected_series": [
+        "JAPAN_UNEMPLOYMENT"
+      ],
+      "cited_series": [],
+      "answer": "ERROR: Client.__init__() got an unexpected keyword argument 'proxies'",
+      "metrics_count": 0,
+      "warnings": [
+        "Client.__init__() got an unexpected keyword argument 'proxies'"
+      ],
+      "judge": {
+        "score": 1,
+        "grounded_in_data": false,
+        "cites_correct_series": false,
+        "contains_specific_values": false,
+        "reasoning": "Evaluation could not complete due to error: Client.__init__() got an unexpected keyword argument 'proxies'"
+      },
+      "specialist_model": "gpt-4o-2024-08-06",
+      "judge_model": "gpt-4o-2024-08-06",
+      "timestamp": "2026-04-23T16:33:00Z"
+    },
+    {
+      "question": "What is the current interest rate set by the Federal Reserve?",
+      "expected_series": [
+        "FEDERAL_FUNDS_RATE"
+      ],
+      "cited_series": [],
+      "answer": "ERROR: Client.__init__() got an unexpected keyword argument 'proxies'",
+      "metrics_count": 0,
+      "warnings": [
+        "Client.__init__() got an unexpected keyword argument 'proxies'"
+      ],
+      "judge": {
+        "score": 1,
+        "grounded_in_data": false,
+        "cites_correct_series": false,
+        "contains_specific_values": false,
+        "reasoning": "Evaluation could not complete due to error: Client.__init__() got an unexpected keyword argument 'proxies'"
+      },
+      "specialist_model": "gpt-4o-2024-08-06",
+      "judge_model": "gpt-4o-2024-08-06",
+      "timestamp": "2026-04-23T16:33:00Z"
+    },
+    {
+      "question": "What is the current exchange rate between the US Dollar and the Euro?",
+      "expected_series": [
+        "USD_EUR"
+      ],
+      "cited_series": [],
+      "answer": "ERROR: Client.__init__() got an unexpected keyword argument 'proxies'",
+      "metrics_count": 0,
+      "warnings": [
+        "Client.__init__() got an unexpected keyword argument 'proxies'"
+      ],
+      "judge": {
+        "score": 1,
+        "grounded_in_data": false,
+        "cites_correct_series": false,
+        "contains_specific_values": false,
+        "reasoning": "Evaluation could not complete due to error: Client.__init__() got an unexpected keyword argument 'proxies'"
+      },
+      "specialist_model": "gpt-4o-2024-08-06",
+      "judge_model": "gpt-4o-2024-08-06",
+      "timestamp": "2026-04-23T16:33:00Z"
+    },
+    {
+      "question": "What has been the GDP growth rate in the US over the past 10 years?",
+      "expected_series": [
+        "REAL_GDP"
+      ],
+      "cited_series": [],
+      "answer": "ERROR: Client.__init__() got an unexpected keyword argument 'proxies'",
+      "metrics_count": 0,
+      "warnings": [
+        "Client.__init__() got an unexpected keyword argument 'proxies'"
+      ],
+      "judge": {
+        "score": 1,
+        "grounded_in_data": false,
+        "cites_correct_series": false,
+        "contains_specific_values": false,
+        "reasoning": "Evaluation could not complete due to error: Client.__init__() got an unexpected keyword argument 'proxies'"
+      },
+      "specialist_model": "gpt-4o-2024-08-06",
+      "judge_model": "gpt-4o-2024-08-06",
+      "timestamp": "2026-04-23T16:33:00Z"
+    },
+    {
+      "question": "What has been the US unemployment rate trend over the past 20 years?",
+      "expected_series": [
+        "UNEMPLOYMENT"
+      ],
+      "cited_series": [],
+      "answer": "ERROR: Client.__init__() got an unexpected keyword argument 'proxies'",
+      "metrics_count": 0,
+      "warnings": [
+        "Client.__init__() got an unexpected keyword argument 'proxies'"
+      ],
+      "judge": {
+        "score": 1,
+        "grounded_in_data": false,
+        "cites_correct_series": false,
+        "contains_specific_values": false,
+        "reasoning": "Evaluation could not complete due to error: Client.__init__() got an unexpected keyword argument 'proxies'"
+      },
+      "specialist_model": "gpt-4o-2024-08-06",
+      "judge_model": "gpt-4o-2024-08-06",
+      "timestamp": "2026-04-23T16:33:00Z"
+    }
+  ]
+}

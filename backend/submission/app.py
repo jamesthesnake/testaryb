@@ -3,7 +3,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from backend.submission.macro_specialist import FRED_SERIES, MacroSpecialist
+from backend.submission.macro_specialist import MacroSpecialist, SERIES_REGISTRY
 
 st.set_page_config(page_title="Macro Specialist", layout="wide")
 
@@ -26,8 +26,8 @@ with st.sidebar:
     st.title("Economic Indicators")
     chart_series = st.selectbox(
         "Series",
-        list(FRED_SERIES.keys()),
-        format_func=lambda k: FRED_SERIES[k][1],
+        list(SERIES_REGISTRY.keys()),
+        format_func=lambda k: SERIES_REGISTRY[k].description,
     )
     n_periods = st.slider("Observations", min_value=12, max_value=120, value=40, step=4)
 
@@ -35,10 +35,10 @@ with st.sidebar:
         with st.spinner("Fetching FRED data…"):
             try:
                 df = specialist.get_series_df(chart_series, limit=n_periods)
-                series_id, description = FRED_SERIES[chart_series]
+                series = SERIES_REGISTRY[chart_series]
                 fig, ax = plt.subplots(figsize=(5, 3))
                 ax.plot(df["date"], df["value"], linewidth=1.5)
-                ax.set_title(description, fontsize=9)
+                ax.set_title(series.description, fontsize=9)
                 ax.set_xlabel("Date", fontsize=8)
                 tick_step = max(1, len(df) // 6)
                 ax.set_xticks(df["date"][::tick_step])
@@ -48,7 +48,7 @@ with st.sidebar:
                 st.pyplot(fig)
                 plt.close(fig)
                 st.caption(
-                    f"Source: [FRED — {series_id}](https://fred.stlouisfed.org/series/{series_id})"
+                    f"Source: [FRED — {series.fred_id}](https://fred.stlouisfed.org/series/{series.fred_id})"
                 )
             except Exception as e:
                 st.error(f"Failed to load data: {e}")

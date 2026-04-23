@@ -1,13 +1,15 @@
-# AI Macro Specialist — Submission README
+# AI Macro Specialist
 **James Hennessy**
 
 ---
 
-## Project Overview
+## Overview
 
-A full-stack AI macroeconomics assistant. A React dashboard shows live FRED economic indicators; a chat panel lets you ask natural-language questions and get data-grounded answers with citations and derived metrics.
+This project is a full-stack AI macroeconomics assistant built around a central `MacroSpecialist` class that retrieves live economic data from FRED and uses GPT-4o to answer natural-language questions with precision and citation. A React dashboard visualises eight key indicators in real time; a chat panel lets users ask anything from "What is the current Fed funds rate?" to "Walk me through US unemployment over the past 20 years."
 
-**Stack:** Python / FastAPI (backend) · React + TypeScript + Vite (frontend) · OpenAI GPT-4o + text-embedding-3-small · FRED API · Pinecone (vector storage)
+The core design philosophy is that the LLM should narrate, not calculate. Growth rates, inflation, and level metrics are computed deterministically in Python before GPT-4o sees any data. This keeps answers reproducible and directly verifiable against the cited FRED sources.
+
+**Stack:** Python 3.12 / FastAPI · React 18 + TypeScript + Vite · OpenAI GPT-4o + text-embedding-3-small · FRED API · Pinecone serverless
 
 ---
 
@@ -19,9 +21,9 @@ A full-stack AI macroeconomics assistant. A React dashboard shows live FRED econ
 - Node.js 18+, [pnpm](https://pnpm.io/)
 - API keys for OpenAI, FRED, and Pinecone (provided)
 
-### 1. Configure environment variables
+### 1. Environment variables
 
-Create `backend/.env` (or copy `.env` at the repo root into `backend/`):
+Place a `.env` file in the repo root:
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -29,25 +31,20 @@ FRED_API_KEY=...
 PINECONE_API_KEY=pcsk_...
 ```
 
-### 2. Install backend dependencies
+### 2. Backend
 
 ```bash
 cd backend
 poetry install
 ```
 
-### 3. Start the backend API
-
-Run from the **repo root** so the `backend` package is importable:
+Start from the **repo root** so the `backend` package is on the path:
 
 ```bash
-cd takehome-macro-specialist-main
 PYTHONPATH="$(pwd)" poetry --directory backend run uvicorn backend.submission.api:app --reload --port 8000
 ```
 
-The API will be available at `http://localhost:8000`.
-
-### 4. Install and start the frontend
+### 3. Frontend
 
 ```bash
 cd frontend
@@ -55,72 +52,65 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:5173`. The Vite dev server proxies `/ask`, `/health`, and `/series` to the backend automatically.
+Open `http://localhost:5173`. The Vite dev server proxies all API calls to the backend.
 
-### 5. Run tests
+### 4. Tests
 
-**Backend:**
 ```bash
-cd backend
-PYTHONPATH="$(pwd)/.." poetry run pytest
+# Backend
+PYTHONPATH="$(pwd)" poetry --directory backend run pytest
+
+# Frontend
+cd frontend && pnpm test
 ```
 
-**Frontend:**
+### 5. Evaluation harness
+
 ```bash
-cd frontend
-pnpm test
+PYTHONPATH="$(pwd)" poetry --directory backend run python -m backend.submission.eval
 ```
+
+Runs the seven canonical spec questions through the full pipeline, scores each response with a GPT-4o judge, and writes a timestamped JSON report to `backend/eval_results/`. Supports `--model` and `--judge-model` flags to compare across models.
 
 ---
 
 ## API Reference
 
-All endpoints are served by the FastAPI backend on port 8000.
-
 ### `GET /health`
-Liveness check.
 ```json
 { "status": "ok" }
 ```
 
 ### `GET /series`
-List all available FRED series.
+Returns metadata for all available FRED series.
 ```json
-[
-  { "key": "GDP", "series_id": "GDP", "description": "US Nominal Gross Domestic Product..." },
-  ...
-]
+[{ "key": "GDP", "series_id": "GDP", "description": "US Nominal Gross Domestic Product..." }]
 ```
 
 ### `GET /series/{series_key}?limit=60`
-Fetch time-series data for a named series. `limit` controls the number of observations (default 60, max 500).
+Returns time-series data for a named series (`limit` default 60, max 500).
 
-**Series keys:** `GDP`, `REAL_GDP`, `CPI`, `EUROZONE_INFLATION`, `UNEMPLOYMENT`, `JAPAN_UNEMPLOYMENT`, `FEDERAL_FUNDS_RATE`, `USD_EUR`
+**Keys:** `GDP` · `REAL_GDP` · `CPI` · `EUROZONE_INFLATION` · `UNEMPLOYMENT` · `JAPAN_UNEMPLOYMENT` · `FEDERAL_FUNDS_RATE` · `USD_EUR`
 
 ```json
 {
   "key": "UNEMPLOYMENT",
   "series_id": "UNRATE",
   "description": "US Unemployment Rate (Percent)",
-  "points": [{ "date": "2025-01-01", "value": 4.1 }, ...],
+  "points": [{ "date": "2025-01-01", "value": 4.1 }],
   "citation": { "source": "FRED...", "series_id": "UNRATE", "url": "https://fred.stlouisfed.org/series/UNRATE" }
 }
 ```
 
 ### `POST /ask`
-Ask a macroeconomic question. Returns a GPT-4o answer grounded in live FRED data.
-
-**Request:**
 ```json
 { "query": "What is the current unemployment rate in Japan?" }
 ```
-
-**Response:**
 ```json
 {
-  "answer": "As of March 2025, Japan's unemployment rate stands at 2.5%...",
-  "citations": [{ "source": "FRED...", "series_id": "LRUN64TTJPM156S", "url": "..." }],
-  "metrics": [{ "metric_key": "japan_unemployment_rate", "value": 2.5, "unit": "%", "date": "2025-03-01", ... }],
+  "answer": "As of February 2026, Japan's unemployment rate stands at 2.80%...",
+  "citations": [{ "series_id": "LRUN64TTJPM156S", "url": "https://fred.stlouisfed.org/series/LRUN64TTJPM156S" }],
+  "metrics": [{ "metric_key": "japan_unemployment_rate", "value": 2.80, "unit": "%", "date": "2026-02-01" }],
   "warnings": [],
   "selectedSeries": "JAPAN_UNEMPLOYMENT"
 }
@@ -130,44 +120,80 @@ Ask a macroeconomic question. Returns a GPT-4o answer grounded in live FRED data
 
 ## Design Approach
 
-### MacroSpecialist class
+### The MacroSpecialist pipeline
 
-`MacroSpecialist` is the central orchestrator. For each query it:
+The `MacroSpecialist` class is the single orchestrator for every query. Its pipeline has four stages:
 
-1. **Retrieves** the most relevant FRED series via embedding similarity (Pinecone) with deterministic guardrails for geography/topic disambiguation (e.g. "Japan" + "unemployment" always routes to `JAPAN_UNEMPLOYMENT` regardless of embedding score).
-2. **Fetches** live observations from the FRED API and computes derived metrics (YoY growth, QoQ annualized growth, inflation rate) deterministically in Python — these are not left to the LLM.
-3. **Builds** a structured context string containing the derived metrics and recent observations, passed to GPT-4o as grounding data.
-4. **Returns** the answer with citations (FRED URLs) and the computed metrics so the frontend can display them independently of the prose answer.
+**1. Retrieval.** The query is embedded with `text-embedding-3-small` and compared against pre-indexed series documents stored in a Pinecone serverless index (`takehome-macro-james-hennessy`). The top-k matches are surfaced. Before returning them, a set of deterministic guardrails run over the raw query text: if the query mentions "Japan" and any labour market term, `JAPAN_UNEMPLOYMENT` is promoted regardless of its embedding score. Similarly, "eurozone"+"inflation" routes to `EUROZONE_INFLATION` rather than the US CPI. This two-layer approach means common geographic disambiguation never depends on the embedding model getting it right.
 
-### Retrieval system
+**2. Data fetching.** Rather than using a fixed observation window, the system infers a time horizon from the query — detecting patterns like "past 10 years", "since 2005", or "decade" — and adjusts the FRED fetch limit accordingly. Each series has an `obs_per_year` field (4 for quarterly GDP, 12 for monthly unemployment, 1 for annual Eurozone CPI) so the fetch scales correctly by frequency. For trend questions, observations are sampled evenly across the full horizon rather than taken from the recent tail, ensuring the LLM sees data spanning the whole period rather than just the last few months.
 
-Series metadata (FRED ID, description, keywords, search text) is consolidated in `SERIES_REGISTRY`, a dict of `FREDSeriesConfig` dataclasses. At startup, each entry is embedded with `text-embedding-3-small` and stored in a Pinecone serverless index (`takehome-macro-james-hennessy`). Subsequent cold starts skip re-embedding by checking `total_vector_count`. When Pinecone is unavailable, the system falls back to in-memory cosine similarity, and further to lexical overlap scoring.
+**3. Context building.** Derived metrics — year-on-year growth, quarter-on-quarter annualised growth, inflation rate — are computed in Python with explicit formulas before GPT-4o sees any numbers. The system prompt instructs the model to treat these as authoritative. This is the most important reliability decision in the project: LLMs are unreliable at arithmetic, and pre-computing the metrics means a wrong answer is traceable to a data issue, not a model hallucination.
 
-### Accuracy and reliability
+**4. Response assembly.** GPT-4o produces the prose. The response object bundles the answer with structured citations (FRED URLs, series IDs) and the computed metrics separately, so the frontend can display them independently of the text. The `selectedSeries` field tells the frontend which chart to surface — this routing decision lives entirely in the backend so the two sides can never diverge.
 
-Derived metrics (growth rates, inflation) are computed with explicit formulas in Python before the LLM sees any data. GPT-4o is instructed to treat these as authoritative and not re-derive them. FRED data returning non-numeric values (FRED uses `"."` for missing observations) is coerced with `pd.to_numeric(..., errors="coerce")` and dropped before any calculation. The `DataRetrievalError` model captures per-series failures and surfaces them as structured warnings so the LLM can acknowledge missing data rather than hallucinate it.
+### Retrieval system architecture
+
+All series metadata lives in a single `SERIES_REGISTRY` dict of `FREDSeriesConfig` dataclasses. Each entry bundles the FRED series ID, description, keyword list, semantic search text, and frequency — replacing the three parallel module-level dicts that are the natural starting point for this kind of project but quickly become a maintenance hazard as series are added. On first startup, each config entry is embedded and upserted into Pinecone; subsequent cold starts skip the embed step entirely by checking the index's vector count. When Pinecone is unavailable the system degrades to in-memory cosine similarity, then to lexical overlap scoring — so the product still works in offline or CI environments.
 
 ### Frontend
 
-A single-page React app with two panels: an economic indicator dashboard (8 cards + a line chart) and an analyst chat. The dashboard pre-fetches all series in parallel on load. After each `/ask` response, the chart switches to the `selectedSeries` returned by the backend — routing logic lives in one place (the backend), not duplicated in the frontend.
+The React frontend is intentionally thin. It pre-fetches all eight series in parallel on load, renders them as indicator cards and a custom SVG line chart, and sends queries to the backend. Critically, it does not contain any series routing logic — an earlier version duplicated the backend's guardrail heuristics in a `findSeriesForQuery` function that would have silently drifted as the backend evolved. The `selectedSeries` field in the `/ask` response is the single source of truth for which chart to highlight after a query.
 
 ---
 
-## Assumptions and Design Decisions
+## Challenges
 
-- **FRED only.** The spec lists FRED, World Bank, and IMF as options; FRED alone covers all seven required questions and has a clean REST API.
-- **8 series.** GDP, Real GDP, CPI, Eurozone Inflation, US Unemployment, Japan Unemployment, Federal Funds Rate, and USD/EUR — sufficient to answer every question in the spec with geography-aware guardrail routing.
-- **Deterministic metrics over LLM arithmetic.** Growth rates and inflation are pre-computed so answers are reproducible and verifiable against the cited FRED data.
-- **Pinecone serverless on AWS us-east-1.** Index is created automatically on first startup if it does not exist. The index name is `takehome-macro-james-hennessy`.
-- **No streaming.** GPT-4o responses are returned in full; streaming would require SSE plumbing on both ends for limited UX gain at this latency.
+**LLM hallucination on numeric data.** The most significant challenge was preventing the model from fabricating figures. Early prompting experiments where the LLM was given raw FRED observations and asked to compute growth rates produced plausible-but-wrong numbers. The solution — pre-computing all metrics deterministically and presenting them as facts rather than inputs — eliminated this class of error entirely and made answers directly auditable.
+
+**FRED data quality.** FRED represents missing observations as the string `"."` rather than null. Without explicit coercion (`pd.to_numeric(..., errors="coerce")`), these silently become NaN and can propagate into growth rate calculations. Handling this correctly and tracking per-series retrieval failures in a structured `DataRetrievalError` model — rather than letting a single series failure abort the whole response — was important for robustness.
+
+**Time horizon mismatch.** A fixed observation window (the obvious starting point) breaks badly on trend questions. "What has been US unemployment over the past 20 years?" with a 24-observation cap gives the model roughly two years of data. The fix required inferring the time horizon from the query, scaling the fetch limit by series frequency, and — critically — sampling observations evenly across the full range rather than from the tail, so the model actually sees the 2008 crisis and the COVID spike rather than just the last few months.
+
+**Keeping routing in one place.** The frontend naturally wants to update the chart when a query comes in, which creates pressure to duplicate the backend's series selection logic in the browser. Resisting this and instead returning `selectedSeries` from the API keeps the two sides decoupled and ensures the chart always reflects what the backend actually used, not what the frontend guessed.
+
+---
+
+## Evaluation
+
+An evaluation harness (`backend/submission/eval.py`) runs the seven canonical spec questions through the full pipeline and scores each response using a GPT-4o judge on five dimensions: overall quality (1–5), groundedness, citation accuracy, and presence of specific numeric values with units and dates.
+
+Results on the current build:
+
+| Question | Score |
+|---|---|
+| Current US GDP | 5/5 |
+| Eurozone inflation rate | 5/5 |
+| Japan unemployment rate | 5/5 |
+| Federal Reserve interest rate | 5/5 |
+| USD/EUR exchange rate | 5/5 |
+| US GDP growth over 10 years | 5/5 |
+| US unemployment trend over 20 years | 5/5 |
+| **Mean** | **5.0 / 5** |
+
+The harness supports `--model` and `--judge-model` flags, writes timestamped JSON to `backend/eval_results/`, and can be run in CI to track quality across model upgrades.
+
+---
+
+## Design Decisions and Rationale
+
+- **FRED as the primary data source.** The project uses FRED only, even though the spec mentions World Bank and IMF as possible alternatives. This is a deliberate scope decision: FRED covers all required questions, has a stable API, and returns data in a format that is fast to integrate and easy to verify. In a time-bounded take-home, depth and reliability on one source is more valuable than shallow support for several.
+- **A registry-driven series model.** All supported indicators live in a single `SERIES_REGISTRY` configuration object. Each entry contains the FRED id, description, search metadata, and observation frequency. This keeps the system maintainable as new series are added: retrieval, metric calculation, citations, and API exposure all build from the same source of truth instead of duplicated constants.
+- **Deterministic metrics before LLM generation.** Growth rates, inflation rates, and latest levels are computed in Python before the prompt is assembled. This is the most important reliability decision in the project. LLMs are good at explanation and synthesis, but not consistently trustworthy for arithmetic. By separating calculation from narration, the output becomes reproducible, auditable, and easier to test.
+- **Hybrid retrieval instead of pure semantic search.** Retrieval combines embeddings with deterministic guardrails. Pinecone is used when available, the system falls back to in-memory embedding similarity if needed, and finally to lexical overlap scoring if embeddings are unavailable. On top of that, geographic rules such as Eurozone inflation and Japan unemployment are explicitly promoted. This design trades a small amount of handcrafted logic for a large gain in correctness and resilience.
+- **Query-aware time horizons.** The amount of FRED data fetched is inferred from the question. Queries such as "past 10 years" or "since 2005" trigger longer windows, scaled by the frequency of the series. Observations are then sampled across the full span rather than from the recent tail. This avoids a common failure mode where a long-horizon question is answered using only recent data.
+- **Structured API responses, not prose-only answers.** The `/ask` endpoint returns `answer`, `citations`, `metrics`, `warnings`, and `selectedSeries` as separate fields. This makes the frontend more robust because it can render citations, metric chips, and chart selection directly from structured data instead of trying to parse meaning out of free text.
+- **Backend-owned chart routing.** The backend decides which series best matches a user query and returns that decision as `selectedSeries`. The frontend does not try to re-implement the routing logic. This prevents drift between the UI and the backend reasoning path, and ensures the highlighted chart always corresponds to the data actually used in the answer.
+- **A thin frontend by design.** The React app focuses on presenting dashboard cards, charts, chat responses, and citations. It does not own macroeconomic logic. Keeping the domain reasoning in the backend reduces duplication, makes the frontend easier to reason about, and keeps future backend improvements from requiring matching browser-side rewrites.
+- **No streaming in the first version.** Responses are returned as a single payload. Streaming would improve perceived latency slightly, but it would also require SSE or WebSocket support on the backend plus more complex incremental state handling in the frontend. For this stage of the project, that complexity does not pay for itself.
+- **Pinecone as an accelerator, not a hard dependency.** The Pinecone index is created automatically on first startup, but the application is still designed to function when Pinecone is unavailable. That makes local development, CI, and demos less brittle, while still preserving the retrieval quality benefits of vector search when the service is present.
 
 ---
 
 ## Potential Future Improvements
 
-- **Broader data coverage.** Add World Bank / IMF series for emerging markets; make `SERIES_REGISTRY` database-backed so new series can be added without a deploy.
-- **Evaluation harness.** Instrument answer quality with a reference QA set (the seven spec questions make a natural starting point) scored by GPT-4o-as-judge, tracked over time and across models.
-- **Streaming responses.** SSE from FastAPI + incremental rendering in React would noticeably improve perceived latency for long answers.
-- **Report generation.** Extend `MacroSpecialist.ask` with a `generate_report` method that structures multi-series analysis as a PDF or structured JSON, using the Instructor library already in the dependency tree.
-- **Rate limiting and auth.** Add per-IP rate limiting (e.g. `slowapi`) and API key auth before any public deployment.
-- **Richer chart interactions.** Replace the custom SVG `LineChart` with Recharts or Vega-Lite to get tooltips, zoom, and multi-series overlays without maintaining drawing math.
+- **Broader data coverage.** Add World Bank and IMF series for emerging markets. Make `SERIES_REGISTRY` database-backed so new series can be added via an admin interface rather than a code change and redeploy.
+- **Streaming responses.** SSE from FastAPI with incremental rendering in React would meaningfully improve perceived latency on longer analytical questions.
+- **Report generation.** A `generate_report` method on `MacroSpecialist` could produce structured multi-series analysis as a PDF or JSON, using the Instructor library already in the dependency tree for typed output.
+- **Rate limiting and auth.** Per-IP rate limiting (`slowapi`) and API key authentication are the minimum required before any public deployment. Each `/ask` request makes two OpenAI API calls; an unthrottled endpoint will hit rate limits quickly under load.
+- **Richer chart interactions.** The custom SVG `LineChart` works well but replacing it with Recharts or Vega-Lite would add tooltips, zoom, and multi-series overlays without maintaining the coordinate math manually.

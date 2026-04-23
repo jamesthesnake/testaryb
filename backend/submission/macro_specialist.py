@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 from typing import List
 
 import openai
@@ -27,6 +29,7 @@ class FREDSeriesConfig:
     description: str
     keywords: list[str]
     search_text: str
+    obs_per_year: int = 12
 
 
 SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
@@ -38,6 +41,7 @@ SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
             "United States GDP gross domestic product economic output recession expansion "
             "quarterly nominal GDP current dollar national accounts level"
         ),
+        obs_per_year=4,
     ),
     "REAL_GDP": FREDSeriesConfig(
         fred_id="GDPC1",
@@ -47,6 +51,7 @@ SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
             "United States real GDP gross domestic product growth inflation adjusted "
             "quarterly chained dollars recession expansion national accounts"
         ),
+        obs_per_year=4,
     ),
     "CPI": FREDSeriesConfig(
         fred_id="CPIAUCSL",
@@ -56,6 +61,7 @@ SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
             "United States inflation consumer price index CPI cost of living prices "
             "deflation monthly price level"
         ),
+        obs_per_year=12,
     ),
     "EUROZONE_INFLATION": FREDSeriesConfig(
         fred_id="FPCPITOTLZGEMU",
@@ -65,6 +71,7 @@ SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
             "Eurozone Euro Area EMU Europe inflation consumer prices CPI annual percent "
             "European Central Bank price stability"
         ),
+        obs_per_year=1,
     ),
     "UNEMPLOYMENT": FREDSeriesConfig(
         fred_id="UNRATE",
@@ -74,6 +81,7 @@ SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
             "United States unemployment rate jobs labor market employment jobless workforce "
             "monthly percent"
         ),
+        obs_per_year=12,
     ),
     "JAPAN_UNEMPLOYMENT": FREDSeriesConfig(
         fred_id="LRUN64TTJPM156S",
@@ -83,6 +91,7 @@ SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
             "Japan Japanese unemployment rate jobs labor market employment jobless workforce "
             "OECD monthly percent"
         ),
+        obs_per_year=12,
     ),
     "FEDERAL_FUNDS_RATE": FREDSeriesConfig(
         fred_id="FEDFUNDS",
@@ -92,6 +101,7 @@ SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
             "Federal funds effective rate Federal Reserve interest rate monetary policy "
             "rate hikes rate cuts overnight bank lending"
         ),
+        obs_per_year=12,
     ),
     "USD_EUR": FREDSeriesConfig(
         fred_id="DEXUSEU",
@@ -101,6 +111,7 @@ SERIES_REGISTRY: dict[str, FREDSeriesConfig] = {
             "United States dollar euro exchange rate foreign exchange forex currency USD EUR "
             "dollars per euro"
         ),
+        obs_per_year=52,  # daily series — sample at weekly granularity for context
     ),
 }
 
@@ -233,6 +244,51 @@ def _annualized_qoq_growth(current: float, previous: float) -> float:
     return (((current / previous) ** 4) - 1) * 100
 
 
+_HORIZON_PATTERNS: list[tuple[re.Pattern[str], int]] = [
+    (re.compile(r'(\d+)\s*-?\s*year', re.I), 0),        # "10 year", "20-year"
+    (re.compile(r'past\s+(\d+)', re.I), 0),              # "past 20"
+    (re.compile(r'last\s+(\d+)', re.I), 0),              # "last 10"
+    (re.compile(r'since\s+(\d{4})', re.I), -1),          # "since 2005" → current year - 2005
+    (re.compile(r'two\s+decades?', re.I), 20),
+    (re.compile(r'(?:a\s+)?decade', re.I), 10),
+]
+
+
+def _infer_horizon_years(query: str) -> int:
+    for pattern, fixed in _HORIZON_PATTERNS:
+        m = pattern.search(query)
+        if m:
+            if fixed == -1:
+                return max(1, date.today().year - int(m.group(1)))
+            if fixed == 0:
+                return int(m.group(1))
+            return fixed
+    return 3
+
+
+def _obs_limit(cfg: FREDSeriesConfig, years: int) -> int:
+    """Fetch limit for a series given a time horizon, capped at 500."""
+    return min(cfg.obs_per_year * years + cfg.obs_per_year, 500)
+
+
+def _context_rows(years: int) -> int:
+    """How many observations to include in the LLM context."""
+    if years <= 3:
+        return 5
+    if years <= 10:
+        return min(years * 4, 40)
+    return min(years * 2, 60)
+
+
+def _sample_for_context(df: pd.DataFrame, n_rows: int) -> pd.DataFrame:
+    """Return n_rows rows sampled evenly across the full series (always includes endpoints)."""
+    if len(df) <= n_rows:
+        return df
+    step = (len(df) - 1) / (n_rows - 1)
+    indices = sorted({round(i * step) for i in range(n_rows)})
+    return df.iloc[indices]
+
+
 def _metric_value(value: float, unit: str) -> str:
     if unit == "%":
         return f"{value:.2f}%"
@@ -253,8 +309,8 @@ class MacroSpecialist:
             print(c.url)
     """
 
-    def __init__(self):
-        self._llm = OpenAI(model=GPT4_O, stream=False, temperature=0.2)
+    def __init__(self, model: str = GPT4_O):
+        self._llm = OpenAI(model=model, stream=False, temperature=0.2)
         self._cache: dict[str, pd.DataFrame] = {}
         self._embedding_client: openai.OpenAI | None = None
         self._series_documents = {key: _series_document(key) for key in SERIES_REGISTRY}
@@ -594,10 +650,13 @@ class MacroSpecialist:
         metrics: list[MacroMetric] = []
         issues: list[DataRetrievalIssue] = []
 
+        horizon_years = _infer_horizon_years(query)
+        n_context_rows = _context_rows(horizon_years)
+
         for key in self._relevant_series(query):
             cfg = SERIES_REGISTRY[key]
             try:
-                df = self._load_series(key, limit=24)
+                df = self._load_series(key, limit=_obs_limit(cfg, horizon_years))
                 clean = _clean_observations(df)
                 if clean.empty:
                     issues.append(self._retrieval_issue(key, ValueError("FRED returned no numeric observations")))
@@ -609,7 +668,7 @@ class MacroSpecialist:
                     f"Calculation: {metric.calculation}"
                     for metric in series_metrics
                 )
-                recent = clean.tail(5).sort_values("date", ascending=False)
+                recent = _sample_for_context(clean, n_context_rows).sort_values("date", ascending=False)
                 rows = "\n".join(f"  {r['date']}: {r['value']}" for _, r in recent.iterrows())
                 parts.append(
                     f"{cfg.description} ({cfg.fred_id}):\n"
